@@ -158,8 +158,19 @@ double localPos(){
   return (4.0*M_PI/720.0)*(driveBackLeft.get_position()+driveMiddleLeft.get_position()+driveFrontLeft.get_position()+driveBackRight.get_position()+driveMiddleRight.get_position()+driveFrontRight.get_position())/6;
 }
 
-void pidMove(double target, double tolerance, double kP, double kPa){
+void pidMoveSimple(double target, double tolerance, double kP){
   double error = target-localPos();
+  while (abs(error) < tolerance){
+    double pwr = error*kP;
+    setDriveMotors(pwr,pwr);
+    error = target-localPos();
+  }
+}
+
+void pidMove(double target, double tolerance, double kP, double kPa){
+  //distance to target
+  double error = target-localPos();
+  //deviation from being straight
   double angleError = 0-getAngle();
 
   while (true){//fabs(error) > tolerance){
