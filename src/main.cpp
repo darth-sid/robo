@@ -160,7 +160,7 @@ double localPos(){
 
 void pidMoveSimple(double target, double tolerance, double KPL, double KPR){
   double error = target-localPos();
-  while (abs(error) < tolerance){
+  while (abs(error) > tolerance){
     setDriveMotors(error*KPL,error*KPR);
     error = target-localPos();
   }
