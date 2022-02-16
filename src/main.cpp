@@ -158,11 +158,10 @@ double localPos(){
   return (4.0*M_PI/720.0)*(driveBackLeft.get_position()+driveMiddleLeft.get_position()+driveFrontLeft.get_position()+driveBackRight.get_position()+driveMiddleRight.get_position()+driveFrontRight.get_position())/6;
 }
 
-void pidMoveSimple(double target, double tolerance, double kP){
+void pidMoveSimple(double target, double tolerance, double KPL, double KPR){
   double error = target-localPos();
   while (abs(error) < tolerance){
-    double pwr = error*kP;
-    setDriveMotors(pwr,pwr);
+    setDriveMotors(error*KPL,error*KPR);
     error = target-localPos();
   }
 }
@@ -316,7 +315,7 @@ void competition_initialize() {}
  * from where it left off.
  */
 void autonomous() {
-  pidMoveSimple(46,1,10);
+  pidMoveSimple(46,1,10,8);
 }
 
 /**
