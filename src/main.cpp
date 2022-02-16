@@ -10,20 +10,21 @@
 
 //CONSTANTSS===============================================================================================
 //PORTS
-#define FRONT_LEFT_PORT 16 //reverse
-#define MIDDLE_LEFT_PORT 19 //ok
-#define BACK_LEFT_PORT 14 //reverse
-#define FRONT_RIGHT_PORT 17 //ok
-#define MIDDLE_RIGHT_PORT 18 //reverse
-#define BACK_RIGHT_PORT 15 //ok
+#define FRONT_LEFT_PORT 7 //reverse
+#define MIDDLE_LEFT_PORT 8 //ok
+#define BACK_LEFT_PORT 3//reverse
+#define FRONT_RIGHT_PORT 6 //ok
+#define MIDDLE_RIGHT_PORT 9//reverse
+#define BACK_RIGHT_PORT 10//ok
 
 #define DIFFMOTOR1 13
-#define DIFFMOTOR2 20
+#define DIFFMOTOR2 14
 
 #define PNEUM_PORT_1 8
-#define PNEUM_PORT_2 0
+#define PNEUM_PORT_2 7
 
-#define VISION_SENSOR_PORT 0
+#define INERTIAL_PORT 15
+#define VISION_PORT 0
 
 #define LEFT_ROT_PORT 0
 #define RIGHT_ROT_PORT 0
@@ -51,8 +52,8 @@ pros::ADIDigitalOut pneumatic2(PNEUM_PORT_2);
 
 pros::Controller Vcontroller(pros::E_CONTROLLER_MASTER);
 
-pros::Vision visionSensor(VISION_SENSOR_PORT);
-
+pros::Vision visionSensor(VISION_PORT);
+pros::Imu inertial(INERTIAL_PORT);
 //rot
 pros::Rotation left_rot(LEFT_ROT_PORT);
 pros::Rotation right_rot(RIGHT_ROT_PORT);
@@ -141,14 +142,37 @@ void clamp(){
 		clamped2 = !clamped2;
 	}
 	pneumatic1.set_value(clamped1);
-  //pneumatic2.set_value(clamped2);
+  pneumatic2.set_value(clamped2);
 }
 
 //returns bots orientation in radians
 double getAngle(){
 	double TRACKER_SCALAR = 1.025;
 	double encoder_angle = (right_rot_pos()*2.75*M_PI/36000 - left_rot_pos()*2.75*M_PI/36000)/(TRACKER_DISTANCE)*TRACKER_SCALAR;
-	return encoder_angle;
+  pros::lcd::set_text(1, std::to_string(inertial.get_yaw()));
+  return inertial.get_yaw();
+  //return encoder_angle;
+}
+
+double localPos(){
+  return (4.0*M_PI/720.0)*(driveBackLeft.get_position()+driveMiddleLeft.get_position()+driveFrontLeft.get_position()+driveBackRight.get_position()+driveMiddleRight.get_position()+driveFrontRight.get_position())/6;
+}
+
+void pidMove(double target, double tolerance, double kP, double kPa){
+  double error = target-localPos();
+  double angleError = 0-getAngle();
+
+  while (true){//fabs(error) > tolerance){
+    double pwr = (error*kP > 127) ? 127 : error*kP;
+    double lpwr = pwr+angleError*kPa;
+    double rpwr = pwr-angleError*kPa;
+
+    pros::lcd::set_text(2, std::to_string(lpwr));
+    pros::lcd::set_text(3, std::to_string(rpwr));
+    setDriveMotors(lpwr,rpwr);
+    error = target-localPos();
+  }
+
 }
 
 void updateCoords(){
@@ -242,6 +266,13 @@ void initialize() {
 	pros::lcd::set_text(7, "reset");
 	tare_rot();
   diff1.tare_position();
+  inertial.reset();
+  driveBackLeft.tare_position();
+  driveMiddleLeft.tare_position();
+  driveFrontLeft.tare_position();
+  driveBackRight.tare_position();
+  driveMiddleRight.tare_position();
+  driveFrontRight.tare_position();
 }
 
 /**
@@ -273,7 +304,9 @@ void competition_initialize() {}
  * will be stopped. Re-enabling the robot will restart the task, not re-start it
  * from where it left off.
  */
-void autonomous() {}
+void autonomous() {
+  pidMove(46,1,10,2);
+}
 
 /**
  * Runs the operator control code. This function will be started in its own task
@@ -300,8 +333,9 @@ void opcontrol() {
     //updateCoords();
 		//clamp();
 		//ringmaster();
-		//pros::lcd::set_text(1, std::to_string(getAngle()*180/M_PI));
-		//pros::lcd::set_text(2, std::to_string(pos_x) + "," + std::to_string(pos_y));
+		pros::lcd::set_text(1, std::to_string(getAngle()));
+    pros::lcd::set_text(2, std::to_string(localPos()));
+    //pros::lcd::set_text(2, std::to_string(pos_x) + "," + std::to_string(pos_y));
     pros::delay(10);
 	}
 }
