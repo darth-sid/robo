@@ -316,7 +316,7 @@ void competition_initialize() {}
  * from where it left off.
  */
 void autonomous() {
-  pidMove(46,1,10,2);
+  pidMoveSimple(46,1,10);
 }
 
 /**
