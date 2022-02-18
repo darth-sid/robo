@@ -117,6 +117,25 @@ void setDriveMotors(int l, int r) {
 	driveMiddleRight = r;
 	}
 
+void brake_coast(){
+	driveFrontLeft.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+	driveFrontRight.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+	driveBackLeft.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+	driveBackRight.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+	driveMiddleLeft.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+	driveMiddleRight.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+}
+void brake_hold(){
+	driveFrontLeft.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+	driveFrontRight.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+	driveBackLeft.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+	driveBackRight.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+	driveMiddleLeft.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+	driveMiddleRight.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+}
+
+
+
 // control motors with controller joystick
 void setDrive() {
    int leftJoystickYInput = Vcontroller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
@@ -154,37 +173,6 @@ double getAngle(){
   //return encoder_angle;
 }
 
-double localPos(){
-  return (4.0*M_PI/720.0)*(driveBackLeft.get_position()+driveMiddleLeft.get_position()+driveFrontLeft.get_position()+driveBackRight.get_position()+driveMiddleRight.get_position()+driveFrontRight.get_position())/6;
-}
-
-void pidMoveSimple(double target, double tolerance, double KPL, double KPR){
-  double error = target-localPos();
-  while (abs(error) > tolerance){
-    setDriveMotors(error*KPL,error*KPR);
-    error = target-localPos();
-  }
-}
-
-void pidMove(double target, double tolerance, double kP, double kPa){
-  //distance to target
-  double error = target-localPos();
-  //deviation from being straight
-  double angleError = 0-getAngle();
-
-  while (true){//fabs(error) > tolerance){
-    double pwr = (error*kP > 127) ? 127 : error*kP;
-    double lpwr = pwr+angleError*kPa;
-    double rpwr = pwr-angleError*kPa;
-
-    pros::lcd::set_text(2, std::to_string(lpwr));
-    pros::lcd::set_text(3, std::to_string(rpwr));
-    setDriveMotors(lpwr,rpwr);
-    error = target-localPos();
-  }
-
-}
-
 void updateCoords(){
 	double angle = getAngle();
 	double delta_angle = angle-prev_angle;
@@ -212,14 +200,47 @@ void updateCoords(){
 	}*/
 	//account for backwards movement
 	if(delta_local_y < 0) angle += M_PI;
-  float adjustment = (std::isnan(atan((delta_local_x)/(delta_local_y)))) ? M_PI/2 : atan((delta_local_x)/(delta_local_y));
-  pros::lcd::set_text(1, std::to_string((angle-adjustment)));
-  pos_x += cos(angle - adjustment)*distance;
+	float adjustment = (std::isnan(atan((delta_local_x)/(delta_local_y)))) ? M_PI/2 : atan((delta_local_x)/(delta_local_y));
+	pros::lcd::set_text(1, std::to_string((angle-adjustment)));
+	pos_x += cos(angle - adjustment)*distance;
 	pos_y += sin(angle - adjustment)*distance;
 	prev_x_encoder = curr_x_encoder;
 	prev_y_encoder = curr_y_encoder;
 	prev_angle = angle;
-	}
+}
+
+double localPos(){
+  return (4.0*M_PI/720.0)*(driveBackLeft.get_position()+driveMiddleLeft.get_position()+driveFrontLeft.get_position()+driveBackRight.get_position()+driveMiddleRight.get_position()+driveFrontRight.get_position())/6;
+}
+
+void pidMoveSimple(double target, double tolerance, double KP){
+  double error = target-localPos();
+  while (abs(error) > tolerance){
+    setDriveMotors(error*KP,error*KP);
+    error = target-localPos();
+  }
+  setDriveMotors(0,0);
+}
+
+
+void pidMove(double target, double tolerance, double kP, double kPa){
+  //distance to target
+  double error = target-localPos();
+  //deviation from being straight
+  double angleError = 0-getAngle();
+
+  while (true){//fabs(error) > tolerance){
+    double pwr = (error*kP > 127) ? 127 : error*kP;
+    double lpwr = pwr+angleError*kPa;
+    double rpwr = pwr-angleError*kPa;
+
+    pros::lcd::set_text(2, std::to_string(lpwr));
+    pros::lcd::set_text(3, std::to_string(rpwr));
+    setDriveMotors(lpwr,rpwr);
+    error = target-localPos();
+  }
+
+}
 
 void tare_rot(){
 	while (tare_right == 0){
@@ -256,6 +277,50 @@ void driveFwd(double distance, double tolerance, double kP){
 
 }
 
+void splitPID(double targetl, double targetr, double tolerance, double kP){
+	double refL = driveFrontLeft.get_position();
+	double refR = driveFrontRight.get_position();
+	double errorL = targetl - (driveFrontLeft.get_position()-refL);
+	double errorR = targetr - (driveFrontRight.get_position()-refR);
+	while (fabs(errorL) > tolerance || fabs(errorR) > tolerance){
+		setDriveMotors(errorL*kP,errorR*kP);
+		errorL = targetl - (driveFrontLeft.get_position()-refL);
+		errorR = targetr - (driveFrontRight.get_position()-refR);
+		pros::lcd::set_text(1,std::to_string((driveFrontLeft.get_position()-refL)));
+		pros::lcd::set_text(2,std::to_string((driveFrontRight.get_position()-refR)));
+	}
+	setDriveMotors(0,0);
+}
+
+void setAngle(double target, double tolerance, double kP){
+	brake_hold();
+	double error = target-inertial.get_yaw();
+	while (fabs(error) > tolerance){
+		error = target-inertial.get_yaw();
+		setDriveMotors(error*kP, -error*kP);
+		pros::lcd::set_text(1, std::to_string(inertial.get_yaw()));
+		pros::lcd::set_text(2, std::to_string(error));
+	}
+	setDriveMotors(0,0);
+	brake_coast();
+}
+
+void bumrush(double target_raw){
+	double target = target_raw * 4/3;
+	double ref = localPos();
+	double d = 0;
+	while (d < target_raw){
+		setDriveMotors(127,127);
+		d = localPos()-ref;
+	}
+	setDriveMotors(0,0);
+	pneumatic1.set_value(false);
+	pros::delay(200);
+	diff1.move_relative(-750,127);
+	diff2.move_relative(-750,127);
+
+}
+
 //================================================================================================================
 
 /**
@@ -266,23 +331,23 @@ void driveFwd(double distance, double tolerance, double kP){
  */
 void initialize() {
 	pros::lcd::initialize();
-	visionSensor.clear_led();
+	/*visionSensor.clear_led();
 	pros::vision_signature_s_t yellow_mogo = pros::Vision::signature_from_utility(1, 2911, 4681, 3796, -6527, -5567, -6046, 3.000, 0);
 	pros::vision_signature_s_t blue_mogo = pros::Vision::signature_from_utility(2, -4319, -3039, -3678, 12895, 15519, 14206, 3.000, 0);
 	pros::vision_signature_s_t red_mogo = pros::Vision::signature_from_utility(3, 12385, 14505, 13446, -1945, -607, -1276, 3.000, 0);
 	visionSensor.set_signature(1, &yellow_mogo);
 	visionSensor.set_signature(2, &blue_mogo);
 	visionSensor.set_signature(3, &red_mogo);
-	pros::lcd::set_text(7, "reset");
+	pros::lcd::set_text(7, "reset");*/
 	tare_rot();
-  diff1.tare_position();
-  inertial.reset();
-  driveBackLeft.tare_position();
-  driveMiddleLeft.tare_position();
-  driveFrontLeft.tare_position();
-  driveBackRight.tare_position();
-  driveMiddleRight.tare_position();
-  driveFrontRight.tare_position();
+	diff1.tare_position();
+	//inertial.reset();
+	driveBackLeft.tare_position();
+	driveMiddleLeft.tare_position();
+	driveFrontLeft.tare_position();
+	driveBackRight.tare_position();
+	driveMiddleRight.tare_position();
+	driveFrontRight.tare_position();
 }
 
 /**
@@ -311,11 +376,34 @@ void competition_initialize() {}
  * for non-competition testing purposes.
  *
  * If the robot is disabled or communications is lost, the autonomous task
- * will be stopped. Re-enabling the robot will restart the task, not re-start it
+ * will be stopped. Re-enabl2ing the robot will restart the task, not re-start it
  * from where it left off.
  */
 void autonomous() {
-  pidMoveSimple(46,1,10,8);
+	//setAngle(90,1,1);
+  	pneumatic1.set_value(true);
+	pneumatic2.set_value(true);
+	bumrush(48);
+	pros::delay(500);
+	splitPID(-1200,1200,20,0.5);
+	diff1.move_relative(-2000,127);
+	diff2.move_relative(-2000,127);
+	splitPID(3400,3400,20,0.5);
+	//pros::delay(250);
+	diff1.move_relative(1000,127);
+	diff2.move_relative(1000,127);
+	pros::delay(500);
+	pneumatic1.set_value(true);
+	splitPID(0,-1000,15,0.5);
+	splitPID(-2500,-2500,20,0.5);
+	pneumatic2.set_value(false);
+	diff1.move_relative(500,127);
+	diff2.move_relative(500,127);
+	diff1.move(127);
+	diff2.move(-127);
+	splitPID(1000,1000,20,0.5);
+	diff1.move(0);
+	diff2.move(0);
 }
 
 /**
@@ -337,15 +425,15 @@ void opcontrol() {
 		/*mogo = visionSensor.get_by_size(0);
 		pros::lcd::set_text(1, "sig:" + std::to_string(mogo.signature));
 		pros::lcd::set_text(2, "pos:" + std::to_string(mogo.x_middle_coord));*/
-    diffyliffy();
+    	diffyliffy();
 		setDrive();
-    clamp();
-    //updateCoords();
+    	clamp();
+    	//updateCoords();
 		//clamp();
 		//ringmaster();
-		pros::lcd::set_text(1, std::to_string(getAngle()));
-    pros::lcd::set_text(2, std::to_string(localPos()));
-    //pros::lcd::set_text(2, std::to_string(pos_x) + "," + std::to_string(pos_y));
-    pros::delay(10);
+		pros::lcd::set_text(1, std::to_string(inertial.get_yaw()));
+    	pros::lcd::set_text(2, std::to_string(localPos()));
+    	//pros::lcd::set_text(2, std::to_string(pos_x) + "," + std::to_string(pos_y));
+    	pros::delay(10);
 	}
 }
