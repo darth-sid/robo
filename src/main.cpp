@@ -20,7 +20,7 @@
 #define DIFFMOTOR1 13
 #define DIFFMOTOR2 14
 
-#define PNEUM_PORT_1 8
+#define PNEUM_PORT_1 6
 #define PNEUM_PORT_2 7
 
 #define INERTIAL_PORT 15
@@ -81,6 +81,10 @@ void diffyliffy(){
   int dir = -1*Vcontroller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_Y);
   if (abs(dir) < 10 ){
     if(Vcontroller.get_digital(pros::E_CONTROLLER_DIGITAL_L1)){
+      diff1.move(127);
+      diff2.move(-127);
+    }
+    else if(Vcontroller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)){
       diff1.move(-127);
       diff2.move(127);
     }
@@ -157,7 +161,7 @@ void clamp(){
 	if(Vcontroller.get_digital_new_press(DIGITAL_R1)){
 		clamped1 = !clamped1;
 	}
-  if(Vcontroller.get_digital_new_press(DIGITAL_L2)){
+  if(Vcontroller.get_digital_new_press(DIGITAL_R2)){
 		clamped2 = !clamped2;
 	}
 	pneumatic1.set_value(clamped1);
@@ -277,19 +281,28 @@ void driveFwd(double distance, double tolerance, double kP){
 
 }
 
-void splitPID(double targetl, double targetr, double tolerance, double kP){
+
+void splitPID(double targetl, double targetr, double tolerance, double kP, double max_speed){
+  brake_hold();
 	double refL = driveFrontLeft.get_position();
 	double refR = driveFrontRight.get_position();
 	double errorL = targetl - (driveFrontLeft.get_position()-refL);
 	double errorR = targetr - (driveFrontRight.get_position()-refR);
 	while (fabs(errorL) > tolerance || fabs(errorR) > tolerance){
-		setDriveMotors(errorL*kP,errorR*kP);
+    double pwrL = (errorL*kP > max_speed) ? max_speed : errorL*kP;
+    double pwrR = (errorR*kP > max_speed) ? max_speed : errorR*kP;
+		setDriveMotors(pwrL,pwrR);
 		errorL = targetl - (driveFrontLeft.get_position()-refL);
 		errorR = targetr - (driveFrontRight.get_position()-refR);
 		pros::lcd::set_text(1,std::to_string((driveFrontLeft.get_position()-refL)));
 		pros::lcd::set_text(2,std::to_string((driveFrontRight.get_position()-refR)));
 	}
 	setDriveMotors(0,0);
+  brake_coast();
+}
+
+void splitPID(double targetl, double targetr, double tolerance, double kP){
+  splitPID(targetl, targetr, tolerance, kP, 127);
 }
 
 void setAngle(double target, double tolerance, double kP){
@@ -321,6 +334,126 @@ void bumrush(double target_raw){
 
 }
 
+void bumrush2(double target_raw){
+	double target = target_raw * 4/3;
+	double ref = localPos();
+	double d = 0;
+	while (d < target_raw){
+		setDriveMotors(-127,-127);
+		d = localPos()-ref;
+	}
+	setDriveMotors(0,0);
+	pneumatic2.set_value(false);
+	pros::delay(200);
+	diff1.move_relative(2000,127);
+	diff2.move_relative(-2000,127);
+
+}
+
+void auton1(){
+  //setAngle(90,1,1);
+  pneumatic1.set_value(true);
+	pneumatic2.set_value(true);
+  diff1.move_relative(-100,127);
+	diff2.move_relative(-100,127);
+	bumrush(48);
+	pros::delay(500);
+	splitPID(-1200,1200,10,0.5);
+	diff1.move_relative(-2000,127);
+	diff2.move_relative(-2000,127);
+	splitPID(3400,3400,10,0.5);
+	//pros::delay(1000);
+	diff1.move_relative(1000,127);
+	diff2.move_relative(1000,127);
+	pros::delay(500);
+	pneumatic1.set_value(true);
+	splitPID(0,-1000,10,0.5);
+  pros::delay(250);
+  diff1.move_relative(500,127);
+	diff2.move_relative(500,127);
+  //bumrush2(40);
+  diff1.move_relative(500,127);
+	diff2.move_relative(500,127);
+	//splitPID(-2600,-2600,30,0.5);
+  setDriveMotors(-127,-127);
+  pros::delay(1500);
+	pneumatic2.set_value(false);
+	//diff1.move_relative(500,127);
+	//diff2.move_relative(500,127);
+  pros::delay(300);
+	diff1.move(127);
+	diff2.move(-127);
+  pros::delay(500);
+	splitPID(1500,1500,15,0.5);
+	diff1.move(0);
+	diff2.move(0);
+}
+
+void auton2(){
+  pneumatic1.set_value(true);
+	pneumatic2.set_value(true);
+	bumrush(48);
+	pros::delay(500);
+  //diff1.move_relative(-1000,127);
+	//diff2.move_relative(-1000,127);
+  //splitPID(-475,0,10,0.5);
+  /*setDriveMotors(-127,-127);
+  pros::delay(1000);
+  setDriveMotors(0,0);*/
+  splitPID(-2000,-2000,10,0.5);
+  pros::delay(250);
+  splitPID(-800,600,10,0.7,100);
+  pros::delay(750);
+  //splitPID(-825,-825,50,0.2);
+  setDriveMotors(-127, -127);
+  pros::delay(500);
+  //pneumatic2.set_value(false);
+  diff1.move(127);
+	diff2.move(-127);
+  pros::delay(500);
+  diff1.move(0);
+	diff2.move(0);
+  splitPID(1500,1500,15,0.5);
+}
+
+void auton3(){
+  pneumatic1.set_value(true);
+  pneumatic2.set_value(true);
+  diff1.move_relative(-100,127);
+  diff2.move_relative(-100,127);
+  splitPID(800,800,15,0.3);
+  splitPID(0,715,15,0.5);
+  splitPID(2500,2500,15,0.3);
+  pros::delay(200);
+  splitPID(225,225,50,0.3);
+  //splitPID(0,100,50,0.6);
+  pros::lcd::set_text(5, "scre");
+  pneumatic1.set_value(false);
+  pros::delay(200);
+  splitPID(-2500,-2500,15,0.3);
+  splitPID(-600,600,15,0.8);
+  pneumatic1.set_value(true);
+  diff1.move_relative(-500,127);
+	diff2.move_relative(-500,127);
+  setDriveMotors(-127,-127);
+  pros::delay(750);
+  setDriveMotors(0,0);
+  pros::delay(500);
+  pneumatic2.set_value(false);
+  diff1.move(127);
+	diff2.move(-127);
+  pros::delay(1000);
+  diff1.move(0);
+	diff2.move(0);
+  pros::delay(250);
+  splitPID(-400,400,15,0.8);
+  setDriveMotors(127,127);
+  pros::delay(500);
+  setDriveMotors(0, 0);
+
+  //splitPID(0,200,15,0.5);
+  //bumrush(50);
+}
 //================================================================================================================
 
 /**
@@ -380,30 +513,7 @@ void competition_initialize() {}
  * from where it left off.
  */
 void autonomous() {
-	//setAngle(90,1,1);
-  	pneumatic1.set_value(true);
-	pneumatic2.set_value(true);
-	bumrush(48);
-	pros::delay(500);
-	splitPID(-1200,1200,20,0.5);
-	diff1.move_relative(-2000,127);
-	diff2.move_relative(-2000,127);
-	splitPID(3400,3400,20,0.5);
-	//pros::delay(250);
-	diff1.move_relative(1000,127);
-	diff2.move_relative(1000,127);
-	pros::delay(500);
-	pneumatic1.set_value(true);
-	splitPID(0,-1000,15,0.5);
-	splitPID(-2500,-2500,20,0.5);
-	pneumatic2.set_value(false);
-	diff1.move_relative(500,127);
-	diff2.move_relative(500,127);
-	diff1.move(127);
-	diff2.move(-127);
-	splitPID(1000,1000,20,0.5);
-	diff1.move(0);
-	diff2.move(0);
+  auton3();
 }
 
 /**
